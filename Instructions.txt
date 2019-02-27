@@ -1,0 +1,145 @@
+########################## 1-st phase ##########################
+
+1-st step "Delete all records from file '/etc/apt/sources.list' and insert the next records"
+  deb http://http.kali.org/kali kali-rolling main contrib non-free
+  deb-src http://http.kali.org/kali kali-rolling main contrib non-free
+
+Run the next commands into the terminal:
+  apt-get clean
+  apt-get update
+  apt-get upgrade
+
+2-nd step "Delete again all records from file '/etc/apt/sources.list' and insert the next records"
+  deb http://old.kali.org/kali sana main non-free contrib
+  deb-src http://old.kali.org/kali sana main non-free contrib
+
+Run the next commands into the terminal:
+  apt-get update
+  apt-get upgrade
+
+3-rd step "Delete again all records from file '/etc/apt/sources.list' and insert the next records"
+  deb http://deb.torproject.org/torproject.org jessie main
+  deb-src http://deb.torproject.org/torproject.org jessie main
+
+Run the next commands into the terminal:
+  apt-get update
+  apt-get upgrade
+
+########################## 2-nd phase ##########################
+
+1-st step "Add the next records into the end of file '/etc/tor/torrc' and save the file"
+  VirtualAddrNetworkIPv4 10.192.0.0/10
+  AutomapHostsOnResolve 1
+  TransPort 9040
+  DNSPort 53
+  ExcludeExitNodes {RU},{UA},{BY}
+
+2-nd step "DNS configuration"
+Run the next commands into the terminal:
+  sudo rm -f /etc/resolv.conf # удалим, т.к. иногда это сим-линк
+  echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+  sudo chattr +i /etc/resolv.conf
+
+3-rd step "Get variable @tor_id (it is a integer variable)"
+Run the next command into the terminal:
+  grep tor /etc/passwd
+
+4-th step "Create script file with code"
+  #!/bin/sh
+
+  ### set variables
+  #destinations you don't want routed through Tor
+  _non_tor="192.168.1.0/24 192.168.0.0/24"
+
+  #the UID that Tor runs as (varies from system to system)
+  _tor_uid="@tor_id"
+
+  #Tor's TransPort
+  _trans_port="9040"
+
+  ### flush iptables
+  iptables -F
+  iptables -t nat -F
+
+  ### set iptables *nat
+  iptables -t nat -A OUTPUT -m owner --uid-owner $_tor_uid -j RETURN
+  iptables -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to-ports 53
+
+  #allow clearnet access for hosts in $_non_tor
+  for _clearnet in $_non_tor 127.0.0.0/9 127.128.0.0/10; do
+    iptables -t nat -A OUTPUT -d $_clearnet -j RETURN
+  done
+
+  #redirect all other output to Tor's TransPort
+  iptables -t nat -A OUTPUT -p tcp --syn -j REDIRECT --to-ports $_trans_port
+
+  ### set iptables *filter
+  iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+  #allow clearnet access for hosts in $_non_tor
+  for _clearnet in $_non_tor 127.0.0.0/8; do
+    iptables -A OUTPUT -d $_clearnet -j ACCEPT
+  done
+
+  #allow only Tor output
+  iptables -A OUTPUT -m owner --uid-owner $_tor_uid -j ACCEPT
+  iptables -A OUTPUT -j REJECT
+
+5-th step "Run the script"
+Run the next commands into the terminal:
+  chmod +x iptables_setup.sh
+  sudo ./iptables_setup.sh
+  sudo /etc/init.d/tor restart
+
+6-th step "Go to 'https://check.torproject.org/'"
+You have to see the web page with text 'Congratulations. This browser is configured to use Tor'
+
+7-th step "Turn off Tor"
+Run the next command into the terminal:
+  sudo /etc/init.d/tor stop
+
+8-th step "Go to 'https://check.torproject.org/'"
+You have to see the web page with text 'Server not found or like that...'
+
+9-th step "Set autorun configuration for Tor"
+Run the next command into the terminal:
+  sudo iptables-save > /etc/iptables_tor
+
+10-th step "Open the file '/etc/rc.local' and insert the next command before the command 'exit 0'"
+The command: 
+  iptables-restore < /etc/iptables_tor
+
+11-th step "Run Tor with autorun mode"
+Run the next command into the terminal:
+  sudo update-rc.d tor enable
+
+12-th step "Turn on Tor"
+Run the next command into the terminal:
+  sudo /etc/init.d/tor restart
+
+#############################################################################
+Terminal working...
+
+root@KaliLinux:~# sudo rm -f /etc/resolv.conf
+root@KaliLinux:~# echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+nameserver 127.0.0.1
+root@KaliLinux:~# sudo chattr +i /etc/resolv.conf
+root@KaliLinux:~# grep tor /etc/passwd
+postgres:x:116:119:PostgreSQL administrator,,,:/var/lib/postgresql:/bin/bash
+couchdb:x:124:129:CouchDB Administrator,,,:/var/lib/couchdb:/bin/bash
+debian-tor:x:135:142::/var/lib/tor:/bin/false
+root@KaliLinux:~# cd Documents
+root@KaliLinux:~/Documents# chmod +x iptables_setup.sh
+root@KaliLinux:~/Documents# sudo ./iptables_setup.sh
+root@KaliLinux:~/Documents# sudo /etc/init.d/tor restart
+[ ok ] Restarting tor (via systemctl): tor.service.
+root@KaliLinux:~/Documents# sudo /etc/init.d/tor stop
+[ ok ] Stopping tor (via systemctl): tor.service.
+root@KaliLinux:~/Documents# sudo /etc/init.d/tor restart
+[ ok ] Restarting tor (via systemctl): tor.service.
+root@KaliLinux:~/Documents# sudo iptables-save > /etc/iptables_tor
+root@KaliLinux:~/Documents# sudo update-rc.d tor enable
+root@KaliLinux:~/Documents# sudo /etc/init.d/tor restart
+root@KaliLinux:~/Documents# 
+
+
